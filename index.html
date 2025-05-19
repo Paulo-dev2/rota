@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Visualização de Transporte Público</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Incluir Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    
+    <style>
+        #map {
+            height: 600px;
+            width: 100%;
+        }
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sistema de Transporte Público - Visualização em Tempo Real</h1>
+    <div id="map"></div>
+    
+    <script>
+        // Inicialização do mapa
+        const map = L.map('map').setView([-23.55, -46.63], 13);
+
+        // Adicionar camada base do OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Dados simulados - paradas
+        const paradas = [
+            {id: 1, nome: "Terminal Centro", lat: -23.550, lng: -46.633, passageiros: 15},
+            {id: 2, nome: "Praça da Sé", lat: -23.551, lng: -46.633, passageiros: 8},
+            {id: 3, nome: "Av. Paulista", lat: -23.561, lng: -46.655, passageiros: 12},
+            {id: 4, nome: "Shopping Center", lat: -23.558, lng: -46.662, passageiros: 5},
+            {id: 5, nome: "Parque Municipal", lat: -23.553, lng: -46.640, passageiros: 3},
+            {id: 6, nome: "Estação Norte", lat: -23.545, lng: -46.630, passageiros: 20},
+            {id: 7, nome: "Universidade", lat: -23.557, lng: -46.675, passageiros: 10}
+        ];
+
+        // Dados simulados - linhas e veículos
+        const linhas = [
+            {
+                id: 1,
+                nome: "Linha 1 - Vermelha",
+                cor: '#ff0000',
+                paradas: [1, 2, 3, 4],
+                veiculos: [
+                    {id: 101, lotacao: 0.7, atraso: 3, posicao: 2},
+                    {id: 102, lotacao: 0.4, atraso: 0, posicao: 0}
+                ]
+            },
+            {
+                id: 2,
+                nome: "Linha 2 - Azul",
+                cor: '#0066ff',
+                paradas: [5, 2, 6, 7],
+                veiculos: [
+                    {id: 201, lotacao: 0.9, atraso: 5, posicao: 1},
+                    {id: 202, lotacao: 0.6, atraso: 2, posicao: 3}
+                ]
+            }
+        ];
+
+        const markers = {
+            paradas: {},
+            veiculos: {}
+        };
+
+        function getColorByLotacao(lotacao) {
+            if (lotacao > 0.9) return '#ff0000';
+            if (lotacao > 0.7) return '#ff8000';
+            if (lotacao > 0.5) return '#ffff00';
+            return '#00ff00';
+        }
+
+        paradas.forEach(parada => {
+            markers.paradas[parada.id] = L.circleMarker([parada.lat, parada.lng], {
+                radius: 5 + Math.min(parada.passageiros, 10),
+                color: '#333',
+                fillColor: '#ff7800',
+                fillOpacity: 0.8,
+                weight: 1
+            }).addTo(map);
+
+            markers.paradas[parada.id].bindPopup(`
+                <div class="info">
+                    <b>${parada.nome}</b><br>
+                    Passageiros esperando: ${parada.passageiros}<br>
+                    Coordenadas: ${parada.lat.toFixed(4)}, ${parada.lng.toFixed(4)}
+                </div>
+            `);
+        });
+
+        linhas.forEach(linha => {
+            const coordenadas = linha.paradas.map(id => {
+                const parada = paradas.find(p => p.id === id);
+                return [parada.lat, parada.lng];
+            });
+
+            L.polyline(coordenadas, {
+                color: linha.cor,
+                weight: 4,
+                opacity: 0.7
+            }).addTo(map);
+
+            linha.veiculos.forEach(veiculo => {
+                const paradaAtual = paradas.find(p => p.id === linha.paradas[veiculo.posicao]);
+                markers.veiculos[veiculo.id] = L.circleMarker([paradaAtual.lat, paradaAtual.lng], {
+                    radius: 10,
+                    color: '#000',
+                    fillColor: getColorByLotacao(veiculo.lotacao),
+                    fillOpacity: 1,
+                    weight: 2
+                }).addTo(map);
+
+                markers.veiculos[veiculo.id].bindPopup(`
+                    <div class="info">
+                        <b>${linha.nome}</b><br>
+                        Veículo: ${veiculo.id}<br>
+                        Lotação: ${Math.round(veiculo.lotacao*100)}%<br>
+                        Atraso: ${veiculo.atraso} min<br>
+                        Próxima parada: ${paradas.find(p => p.id === linha.paradas[(veiculo.posicao+1)%linha.paradas.length]).nome}
+                    </div>
+                `);
+            });
+        });
+
+        setInterval(() => {
+            linhas.forEach(linha => {
+                linha.veiculos.forEach(veiculo => {
+                    veiculo.posicao = (veiculo.posicao + 1) % linha.paradas.length;
+                    veiculo.lotacao = Math.min(1, Math.max(0, veiculo.lotacao + (Math.random() * 0.1 - 0.05)));
+                    veiculo.atraso = Math.max(0, veiculo.atraso + (Math.random() * 2 - 1));
+
+                    const paradaAtual = paradas.find(p => p.id === linha.paradas[veiculo.posicao]);
+                    markers.veiculos[veiculo.id].setLatLng([paradaAtual.lat, paradaAtual.lng]);
+                    markers.veiculos[veiculo.id].setStyle({
+                        fillColor: getColorByLotacao(veiculo.lotacao)
+                    });
+
+                    markers.veiculos[veiculo.id].setPopupContent(`
+                        <div class="info">
+                            <b>${linha.nome}</b><br>
+                            Veículo: ${veiculo.id}<br>
+                            Lotação: ${Math.round(veiculo.lotacao*100)}%<br>
+                            Atraso: ${veiculo.atraso} min<br>
+                            Próxima parada: ${paradas.find(p => p.id === linha.paradas[(veiculo.posicao+1)%linha.paradas.length]).nome}
+                        </div>
+                    `);
+                });
+            });
+
+            paradas.forEach(parada => {
+                parada.passageiros = Math.max(0, parada.passageiros + Math.floor(Math.random() * 5 - 2));
+                markers.paradas[parada.id].setRadius(5 + Math.min(parada.passageiros, 10));
+                markers.paradas[parada.id].setPopupContent(`
+                    <div class="info">
+                        <b>${parada.nome}</b><br>
+                        Passageiros esperando: ${parada.passageiros}<br>
+                        Coordenadas: ${parada.lat.toFixed(4)}, ${parada.lng.toFixed(4)}
+                    </div>
+                `);
+            });
+        }, 5000);
+
+        const legend = L.control({position: 'bottomright'});
+        legend.onAdd = function(map) {
+            const div = L.DomUtil.create('div', 'info legend');
+            div.innerHTML = `
+                <h4>Legenda</h4>
+                <div><i style="background:#ff7800; width: 12px; height: 12px; display:inline-block;"></i> Paradas</div>
+                <div><i style="background:#ff0000; width: 12px; height: 12px; display:inline-block;"></i> Veículo lotado (&gt;90%)</div>
+                <div><i style="background:#ff8000; width: 12px; height: 12px; display:inline-block;"></i> Ocupado (70-90%)</div>
+                <div><i style="background:#ffff00; width: 12px; height: 12px; display:inline-block;"></i> Moderado (50-70%)</div>
+                <div><i style="background:#00ff00; width: 12px; height: 12px; display:inline-block;"></i> Tranquilo (&lt;50%)</div>
+            `;
+            return div;
+        };
+        legend.addTo(map);
+    </script>
+</body>
+</html>
